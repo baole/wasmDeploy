@@ -2,27 +2,25 @@
 
 `wasmDeploy` packages Kotlin/Wasm production output into a cache-safe, fingerprinted, and deployable release for static web hosting providers.
 
-## What wasmDeploy Adds to the Existing Toolchain
+## What `wasmDeploy` Adds to the Existing Toolchain
 
-`wasmDeploy` deliberately reuses Kotlin/Wasm's production compiler and Webpack
-pipeline. It does not replace the Kotlin compiler, Binaryen, or Webpack.
+`wasmDeploy` reuses Kotlin/Wasm's production compiler and Webpack pipeline without replacing the Kotlin compiler, Binaryen, or Webpack.
 
-| Concern | Existing Kotlin/Wasm toolchain | What wasmDeploy adds | Benefit |
+| Concern | Standard Toolchain | What `wasmDeploy` Adds | Key Benefit |
 | --- | --- | --- | --- |
-| Kotlin/Wasm compilation | Compiles Kotlin to Wasm and JavaScript interop glue. | Uses the existing production compilation tasks and can select their optimized artifacts before Webpack runs. | No second compiler pipeline or incompatible Wasm output. |
-| Wasm optimization | Kotlin production builds use Binaryen. | Preserves and verifies the compiler-optimized artifacts rather than running an unrelated optimizer afterward. | Keeps optimization aligned with the Kotlin version and Wasm features in use. |
-| JavaScript bundling and minification | Kotlin's production Webpack task bundles and minifies generated JavaScript. | Packages the resulting browser distribution into a release directory. | Retains Kotlin/Webpack semantics while making the output host-ready. |
-| Project-owned JS and CSS | Usually requires custom Gradle, Node, or shell scripts. | Copies and minifies configured static JS/CSS resources with pinned tools. | Removes bespoke deployment scripts while keeping non-Kotlin assets optimized. |
-| Cache-safe hosting | Webpack output and static assets often need project-specific post-processing. | Fingerprints deployable JS, CSS, and Wasm, rewrites local references, and emits a manifest. | Enables immutable caching for changed assets without serving stale files. |
-| Compression | Hosts vary in whether they compress at the edge. | Enforces Brotli size budgets and can generate `.br`/`.gz` artifacts. | Prevents unnoticed size regressions and supports hosts that serve precompressed files. |
-| Release correctness | Missing files, stale paths, and invalid Wasm imports are normally discovered after deployment. | Verifies hashes, local references, entry points, and Wasm-to-JavaScript imports before release. | Catches deployment and library-upgrade regressions in CI. |
+| **Wasm Optimization** | Uses Kotlin compiler & Binaryen | Selects & preserves compiler-optimized artifacts before Webpack | Retains original Kotlin/Wasm binary compatibility |
+| **JS/CSS Assets** | Requires custom Node or shell scripts | Copies & minifies static assets using pinned tools | Replaces custom build & deployment scripts |
+| **Cache Security** | Unfingerprinted assets risk stale caching | Fingerprints JS/CSS/Wasm & rewrites internal references | Enables immutable (`max-age=365d`) edge caching |
+| **Compression** | Relies solely on edge host behavior | Generates `.br`/`.gz` files & enforces Brotli size budgets | Prevents size regressions & speeds up static serving |
+| **Release Verification** | Broken imports/paths caught post-deploy | Verifies hashes, references, entry points & Wasm-JS imports | Catches broken deployments in CI before release |
 
-In short: Kotlin owns language-aware compilation and optimization; `wasmDeploy`
-owns hosting output, caching, compression, and deployment verification.
+> **In short:** Kotlin owns language-aware compilation and optimization; `wasmDeploy` owns hosting output, caching, compression, and deployment verification.
 
-## Public Repository Setup
+## Setup
 
-Add the plugin to your `settings.gradle.kts`:
+### 1. Apply Settings Plugin
+
+Add the plugin to `settings.gradle.kts`:
 
 ```kotlin
 pluginManagement {
@@ -33,13 +31,13 @@ pluginManagement {
 }
 
 plugins {
-    id("io.github.baole.wasmdeploy.settings") version "0.3.7"
+    id("io.github.baole.wasmdeploy.settings") version "0.3.9"
 }
 ```
 
-## Minimal Compose Multiplatform Configuration
+### 2. Apply Build Plugin
 
-In your `composeApp/build.gradle.kts` (or Wasm module `build.gradle.kts`):
+In your module's `build.gradle.kts` (e.g., `composeApp/build.gradle.kts`):
 
 ```kotlin
 plugins {
@@ -52,7 +50,6 @@ kotlin {
     wasmJs {
         moduleName = "composeApp"
         browser {
-            val projectDir = project.projectDir
             commonWebpackConfig {
                 outputFileName = "composeApp.js"
             }
@@ -71,7 +68,7 @@ Building the project or running `./gradlew wasmJsBrowserDistribution` automatica
 
 ---
 
-## Precompression Modes
+## Precompression & Size Budgets
 
 `wasmDeploy` supports both size-budget validation and automated precompression generation (`.br` and `.gz`).
 
@@ -142,9 +139,9 @@ For entry point (`index.html`):
 
 ---
 
-## Migration Guide from Custom Wasm Deployment Scripts
+## Migration Guide
 
-If you currently use custom bash or Node scripts to process Webpack output:
+If migrating from custom deployment scripts:
 
 1. Remove custom post-processing scripts or `exec` tasks from `build.gradle.kts`.
 2. Apply `id("io.github.baole.wasmdeploy.settings")` in `settings.gradle.kts` and `id("io.github.baole.wasmdeploy")` in `build.gradle.kts`.
@@ -186,12 +183,12 @@ wasmDeploy {
 
 ## Tasks
 
-- `wasmDeployPrepareTools` — extracts bundled tool definitions.
-- `wasmDeployInstallTools` — provisions plugin-managed Node.js and dependencies.
-- `wasmDeployPrepareOptimizedKotlinArtifacts` — selects compiler-optimized Wasm artifacts before Webpack.
-- `wasmDeployMinify` — minifies static JS/CSS and strips source maps.
-- `wasmDeployOptimize` — fingerprints assets, rewrites references into release directory, and generates precompressed files if enabled.
-- `wasmDeployVerifySizeBudget` — enforces configured Brotli size budgets.
-- `wasmDeployVerifyWasmImports` — validates Wasm JavaScript imports.
-- `wasmDeployVerify` — validates manifest integrity, SHA-256 hashes, entry points, and local references.
-- `wasmDeployRelease` — runs the complete end-to-end deployment pipeline.
+- `wasmDeployPrepareTools` — Extracts bundled tool definitions.
+- `wasmDeployInstallTools` — Provisions plugin-managed Node.js and dependencies.
+- `wasmDeployPrepareOptimizedKotlinArtifacts` — Selects compiler-optimized Wasm artifacts before Webpack.
+- `wasmDeployMinify` — Minifies static JS/CSS and strips source maps.
+- `wasmDeployOptimize` — Fingerprints assets, rewrites references into release directory, and generates precompressed files if enabled.
+- `wasmDeployVerifySizeBudget` — Enforces configured Brotli size budgets.
+- `wasmDeployVerifyWasmImports` — Validates Wasm JavaScript imports.
+- `wasmDeployVerify` — Validates manifest integrity, SHA-256 hashes, entry points, and local references.
+- `wasmDeployRelease` — Runs the complete end-to-end deployment pipeline.
