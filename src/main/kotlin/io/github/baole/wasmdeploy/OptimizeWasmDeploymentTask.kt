@@ -56,12 +56,14 @@ abstract class OptimizeWasmDeploymentTask : DefaultTask() {
             includes = compressionIncludes.getOrElse(emptyList()),
             excludes = compressionExcludes.getOrElse(emptyList()),
         )
-        WasmDeploymentPipeline.optimize(
+        val report = WasmDeploymentPipeline.optimize(
             source = inputDirectory.get().asFile.toPath(),
             destination = outputDirectory.get().asFile.toPath(),
             projectBuildDir = projectBuildDirectory.orNull?.asFile?.toPath(),
             allowExternalOutputDirectory = allowExternalOutputDirectory.getOrElse(false),
             compressionOptions = compressionOptions,
         )
+        logger.lifecycle(report.formatSummary())
     }
 }
+

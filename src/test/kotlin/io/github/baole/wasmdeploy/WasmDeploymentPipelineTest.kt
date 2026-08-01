@@ -184,7 +184,33 @@ class WasmDeploymentPipelineTest {
         WasmDeploymentPipeline.verify(release)
     }
 
+    @Test
+    fun `optimize generates detailed optimization report with performance gains`() {
+        val source = createTempDirectory("wasm-deploy-source")
+        val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<html><head></head><body><script src=\"./main.js\"></script></body></html>")
+        source.resolve("main.js").writeText("const imports = { \"fixture.import\": () => Unit }")
+        source.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
+        source.resolve("main.js.map").writeText("{\"version\":3}")
+
+        val report = WasmDeploymentPipeline.optimize(source, release)
+
+        assertTrue(report.originalTotalFileCount == 4)
+        assertTrue(report.sourceMapsStrippedCount == 1)
+        assertTrue(report.sourceMapsStrippedBytes > 0)
+        assertTrue(report.preloadsInjectedCount > 0)
+
+        val summary = report.formatSummary()
+        assertTrue(summary.contains("WasmDeploy Optimization Report"))
+        assertTrue(summary.contains("OVERALL PERFORMANCE GAINS"))
+        assertTrue(summary.contains("Source Maps Stripped"))
+        assertTrue(summary.contains("BREAKDOWN BY ASSET CATEGORY"))
+        assertTrue(summary.contains("Wasm Binaries"))
+        assertTrue(summary.contains("JavaScript"))
+    }
+
     private fun wasmWithJsCodeImport(importName: String): ByteArray {
+
         val module = "js_code".encodeToByteArray()
         val name = importName.encodeToByteArray()
         val importPayload = byteArrayOf(1, module.size.toByte()) + module + byteArrayOf(name.size.toByte()) + name + byteArrayOf(0, 0)

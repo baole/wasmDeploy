@@ -22,6 +22,141 @@ internal data class PipelineCompressionOptions(
     val excludes: List<String> = emptyList(),
 )
 
+internal data class AssetCategoryStats(
+
+    val categoryName: String,
+    val fileCount: Int,
+    val originalSizeBytes: Long,
+    val optimizedSizeBytes: Long,
+    val transferSizeBytes: Long,
+) {
+    val bytesSaved: Long get() = (originalSizeBytes - transferSizeBytes).coerceAtLeast(0)
+    val percentSaved: Double get() = if (originalSizeBytes > 0) (bytesSaved.toDouble() / originalSizeBytes) * 100.0 else 0.0
+}
+
+internal data class OptimizationReport(
+    val originalTotalSizeBytes: Long,
+    val originalTotalFileCount: Int,
+    val sourceMapsStrippedCount: Int,
+    val sourceMapsStrippedBytes: Long,
+    val fingerprintedFilesCount: Int,
+    val preloadsInjectedCount: Int,
+    val compressionEnabled: Boolean,
+    val brotliEnabled: Boolean,
+    val gzipEnabled: Boolean,
+    val compressionLevel: Int,
+    val optimizedUncompressedSizeBytes: Long,
+    val totalTransferSizeBytes: Long,
+    val categoryStats: List<AssetCategoryStats>,
+) {
+    val totalBytesSaved: Long get() = (originalTotalSizeBytes - totalTransferSizeBytes).coerceAtLeast(0)
+    val totalPercentSaved: Double get() = if (originalTotalSizeBytes > 0) (totalBytesSaved.toDouble() / originalTotalSizeBytes) * 100.0 else 0.0
+
+    fun formatSummary(useColor: Boolean = true): String {
+        fun color(text: String, code: String): String = if (useColor) "$code$text\u001B[0m" else text
+
+        val cBold = "\u001B[1m"
+        val cCyan = "\u001B[36m"
+        val cGreen = "\u001B[32m"
+        val cYellow = "\u001B[33m"
+        val cGray = "\u001B[90m"
+
+        val sb = StringBuilder()
+        val lineSep = color("================================================================================", cCyan)
+        val subSep  = color("--------------------------------------------------------------------------------", cGray)
+
+        val compressionMode = when {
+            compressionEnabled && brotliEnabled && gzipEnabled -> "Brotli (Level $compressionLevel) + Gzip"
+            compressionEnabled && brotliEnabled -> "Brotli (Level $compressionLevel)"
+            compressionEnabled && gzipEnabled -> "Gzip"
+            else -> "Uncompressed"
+        }
+
+        sb.appendLine()
+        sb.appendLine(lineSep)
+        sb.appendLine(color("                    🚀 WasmDeploy Optimization Report", "$cCyan$cBold"))
+        sb.appendLine(lineSep)
+        sb.appendLine()
+        sb.appendLine(color("  📊 OVERALL PERFORMANCE GAINS", "$cCyan$cBold"))
+        sb.appendLine("  $subSep")
+        sb.appendLine("  Original Build Size       : ${formatBytes(originalTotalSizeBytes)} ($originalTotalFileCount files)")
+        sb.appendLine("  Optimized Transfer Size   : ${color(formatBytes(totalTransferSizeBytes), cYellow)} [Mode: $compressionMode]")
+        val rawTotalSavings = "${formatBytes(totalBytesSaved)} (${String.format(java.util.Locale.US, "-%.2f%%", totalPercentSaved)} reduction)"
+        sb.appendLine("  Total Network Savings     : ${color(rawTotalSavings, "$cGreen$cBold")}")
+        if (sourceMapsStrippedCount > 0) {
+            sb.appendLine("  Source Maps Stripped      : $sourceMapsStrippedCount ${if (sourceMapsStrippedCount == 1) "file" else "files"} (${formatBytes(sourceMapsStrippedBytes)} removed)")
+        } else {
+            sb.appendLine("  Source Maps Stripped      : None (0 files)")
+        }
+        sb.appendLine()
+        sb.appendLine(color("  ⚡ USER & RUNTIME BENEFITS", "$cCyan$cBold"))
+        sb.appendLine("  $subSep")
+        sb.appendLine("  • Fingerprinted Assets    : $fingerprintedFilesCount ${if (fingerprintedFilesCount == 1) "file" else "files"} with SHA-256 hashes (100% immutable cache)")
+        sb.appendLine("  • Preload Directives      : Injected $preloadsInjectedCount preload link(s) into index.html for parallel fetch")
+        if (compressionEnabled) {
+            sb.appendLine("  • Pre-compressed Delivery : Static pre-compressed assets (.br/.gz) for instant CDN response")
+        }
+        sb.appendLine()
+        sb.appendLine(color("  📁 BREAKDOWN BY ASSET CATEGORY", "$cCyan$cBold"))
+        sb.appendLine("  $subSep")
+        val headerRow = "%-16s %-8s %-14s %-14s %-14s %-10s".format("Category", "Files", "Original", "Optimized", "Transfer", "Savings")
+        sb.appendLine("  " + color(headerRow, cBold))
+        sb.appendLine("  $subSep")
+
+        var totalFiles = 0
+        var totalOrig = 0L
+        var totalOpt = 0L
+        var totalTrans = 0L
+
+        categoryStats.filter { it.fileCount > 0 || it.originalSizeBytes > 0 }.forEach { cat ->
+            val savingsStr = String.format(java.util.Locale.US, "-%.2f%%", cat.percentSaved)
+            val row = "%-16s %-8d %-14s %-14s %-14s %-10s".format(
+                cat.categoryName,
+                cat.fileCount,
+                formatBytes(cat.originalSizeBytes),
+                formatBytes(cat.optimizedSizeBytes),
+                formatBytes(cat.transferSizeBytes),
+                savingsStr,
+            )
+            sb.appendLine("  $row")
+            totalFiles += cat.fileCount
+            totalOrig += cat.originalSizeBytes
+            totalOpt += cat.optimizedSizeBytes
+            totalTrans += cat.transferSizeBytes
+        }
+
+        val overallSavedBytes = (totalOrig - totalTrans).coerceAtLeast(0)
+        val overallPercent = if (totalOrig > 0) (overallSavedBytes.toDouble() / totalOrig) * 100.0 else 0.0
+        val overallSavingsStr = String.format(java.util.Locale.US, "-%.2f%%", overallPercent)
+        sb.appendLine("  $subSep")
+        val totalRow = "%-16s %-8d %-14s %-14s %-14s %-10s".format(
+            "TOTAL",
+            totalFiles,
+            formatBytes(totalOrig),
+            formatBytes(totalOpt),
+            formatBytes(totalTrans),
+            overallSavingsStr,
+        )
+        sb.appendLine("  " + color(totalRow, "$cGreen$cBold"))
+        sb.appendLine(lineSep)
+        return sb.toString()
+    }
+
+
+    companion object {
+        fun formatBytes(bytes: Long): String {
+            if (bytes <= 0) return "0 B"
+            if (bytes < 1024) return "$bytes B"
+            val kb = bytes / 1024.0
+            if (kb < 1024) return String.format(java.util.Locale.US, "%.2f KB", kb)
+            val mb = kb / 1024.0
+            if (mb < 1024) return String.format(java.util.Locale.US, "%.2f MB", mb)
+            val gb = mb / 1024.0
+            return String.format(java.util.Locale.US, "%.2f GB", gb)
+        }
+    }
+}
+
 internal object WasmDeploymentPipeline {
     private val fingerprintedExtensions = setOf("css", "js", "mjs", "wasm")
     private val textExtensions = setOf("css", "html", "js", "mjs")
@@ -37,7 +172,7 @@ internal object WasmDeploymentPipeline {
         projectBuildDir: Path? = null,
         allowExternalOutputDirectory: Boolean = false,
         compressionOptions: PipelineCompressionOptions = PipelineCompressionOptions(),
-    ) {
+    ): OptimizationReport {
         val normalizedSource = source.toAbsolutePath().normalize()
         val normalizedDestination = destination.toAbsolutePath().normalize()
         require(Files.isDirectory(normalizedSource)) { "Wasm distribution directory does not exist: $normalizedSource" }
@@ -78,6 +213,25 @@ internal object WasmDeploymentPipeline {
         val stagingDir = Files.createTempDirectory(parentDir, ".wasm-deploy-staging-")
 
         try {
+            val originalFiles = files(normalizedSource)
+            val originalTotalCount = originalFiles.size
+            val originalTotalBytes = originalFiles.sumOf { Files.size(it) }
+
+            val sourceMapFiles = originalFiles.filter { it.extension == "map" }
+            val sourceMapsStrippedCount = sourceMapFiles.size
+            val sourceMapsStrippedBytes = sourceMapFiles.sumOf { Files.size(it) }
+
+            fun categoryForExtension(ext: String): String = when (ext.lowercase()) {
+                "wasm" -> "Wasm Binaries"
+                "js", "mjs" -> "JavaScript"
+                "css" -> "CSS Styles"
+                "html" -> "HTML Documents"
+                else -> "Other Assets"
+            }
+
+            val nonMapOriginalFiles = originalFiles.filter { it.extension != "map" }
+            val originalByCategory = nonMapOriginalFiles.groupBy { categoryForExtension(it.extension) }
+
             normalizedSource.toFile().copyRecursively(stagingDir.toFile(), overwrite = true)
             Files.walk(stagingDir).use { paths ->
                 paths.filter { it.isRegularFile() && it.extension == "map" }.forEach(Files::delete)
@@ -93,6 +247,7 @@ internal object WasmDeploymentPipeline {
                 relative(stagingDir, file) to fingerprint(relative(stagingDir, file), bytes)
             }
             var converged = false
+            var preloadsInjectedTotal = 0
             for (attempt in 0 until 12) {
                 val rewritten = originalContent.mapValues { (file, bytes) ->
                     if (file.extension in textExtensions) {
@@ -109,7 +264,18 @@ internal object WasmDeploymentPipeline {
                 }
                 if (nextManifest == manifest) {
                     rewritten.forEach { (file, bytes) -> file.writeBytes(bytes) }
-                    supportingTextContent.forEach { (file, text) -> file.writeText(rewrite(text, manifest, relative(stagingDir, file))) }
+                    preloadsInjectedTotal = 0
+                    supportingTextContent.forEach { (file, text) ->
+                        val rewrittenText = rewrite(text, manifest, relative(stagingDir, file))
+                        val finalText = if (file.name == "index.html") {
+                            val (injectedHtml, count) = injectPreloads(rewrittenText, manifest)
+                            preloadsInjectedTotal += count
+                            injectedHtml
+                        } else {
+                            rewrittenText
+                        }
+                        file.writeText(finalText)
+                    }
                     manifest = nextManifest
                     converged = true
                     break
@@ -134,6 +300,59 @@ internal object WasmDeploymentPipeline {
 
             writeManifest(stagingDir, manifest, compressionOptions)
 
+            val finalArtifacts = files(stagingDir).filter {
+                !it.name.endsWith(".br") && !it.name.endsWith(".gz") && it.name != manifestName
+            }
+            val finalByCategory = finalArtifacts.groupBy { categoryForExtension(it.extension) }
+
+            val categoryOrder = listOf("Wasm Binaries", "JavaScript", "CSS Styles", "HTML Documents", "Other Assets")
+            val categoryStatsList = categoryOrder.map { catName ->
+                val origList = originalByCategory[catName].orEmpty()
+                val origBytes = origList.sumOf { Files.size(it) }
+
+                val finalList = finalByCategory[catName].orEmpty()
+                val finalCount = finalList.size
+                val finalOptBytes = finalList.sumOf { Files.size(it) }
+
+                val finalTransBytes = finalList.sumOf { file ->
+                    val relPath = relative(stagingDir, file)
+                    val uncomp = Files.size(file)
+                    val brFile = stagingDir.resolve("$relPath.br")
+                    val gzFile = stagingDir.resolve("$relPath.gz")
+                    val brSize = if (Files.exists(brFile)) Files.size(brFile) else null
+                    val gzSize = if (Files.exists(gzFile)) Files.size(gzFile) else null
+                    minOf(uncomp, brSize ?: Long.MAX_VALUE, gzSize ?: Long.MAX_VALUE)
+                }
+
+                AssetCategoryStats(
+                    categoryName = catName,
+                    fileCount = finalCount,
+                    originalSizeBytes = origBytes,
+                    optimizedSizeBytes = finalOptBytes,
+                    transferSizeBytes = finalTransBytes,
+                )
+            }
+
+            val fingerprintedFilesCount = manifest.size
+            val optimizedUncompressedTotal = finalArtifacts.sumOf { Files.size(it) }
+            val totalTransferTotal = categoryStatsList.sumOf { it.transferSizeBytes }
+
+            val report = OptimizationReport(
+                originalTotalSizeBytes = originalTotalBytes,
+                originalTotalFileCount = originalTotalCount,
+                sourceMapsStrippedCount = sourceMapsStrippedCount,
+                sourceMapsStrippedBytes = sourceMapsStrippedBytes,
+                fingerprintedFilesCount = fingerprintedFilesCount,
+                preloadsInjectedCount = preloadsInjectedTotal,
+                compressionEnabled = compressionOptions.enabled,
+                brotliEnabled = compressionOptions.brotli,
+                gzipEnabled = compressionOptions.gzip,
+                compressionLevel = compressionOptions.level,
+                optimizedUncompressedSizeBytes = optimizedUncompressedTotal,
+                totalTransferSizeBytes = totalTransferTotal,
+                categoryStats = categoryStatsList,
+            )
+
             if (Files.exists(normalizedDestination)) {
                 val backupDir = Files.createTempDirectory(parentDir, ".wasm-deploy-backup-")
                 try {
@@ -153,12 +372,15 @@ internal object WasmDeploymentPipeline {
             } else {
                 Files.move(stagingDir, normalizedDestination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             }
+
+            return report
         } finally {
             if (Files.exists(stagingDir)) {
                 deleteDirectoryRecursively(stagingDir)
             }
         }
     }
+
 
     fun verify(release: Path, forbiddenJavaScriptPatterns: List<String> = emptyList()) {
         val manifestPath = release.resolve(manifestName)
@@ -418,6 +640,37 @@ internal object WasmDeploymentPipeline {
             }
         }
     }
+
+    private fun injectPreloads(htmlText: String, manifest: Map<String, String>): Pair<String, Int> {
+        if (!htmlText.contains("</head>", ignoreCase = true)) return htmlText to 0
+
+        val links = mutableListOf<String>()
+
+        manifest.values.filter { file ->
+            file.endsWith(".js") && file.matches(Regex("(?:^|/)(?:main|composeApp)\\.[0-9a-f]{16,}\\.js$"))
+        }.forEach { jsFile ->
+            val tag = "<link rel=\"modulepreload\" href=\"/$jsFile\">"
+            if (!htmlText.contains(tag)) {
+                links.add("    $tag")
+            }
+        }
+
+        manifest.values.filter { file ->
+            file.endsWith(".wasm")
+        }.sorted().forEach { wasmFile ->
+            val tag = "<link rel=\"preload\" href=\"/$wasmFile\" as=\"fetch\" type=\"application/wasm\" crossorigin=\"anonymous\">"
+            if (!htmlText.contains(tag)) {
+                links.add("    $tag")
+            }
+        }
+
+        if (links.isEmpty()) return htmlText to 0
+
+        val injection = links.joinToString("\n") + "\n  </head>"
+        val newHtml = Regex("</head>", RegexOption.IGNORE_CASE).replaceFirst(htmlText, injection)
+        return newHtml to links.size
+    }
+
 
     fun parseManifest(content: String): Map<String, String> {
         val map = mutableMapOf<String, String>()

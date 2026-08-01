@@ -92,7 +92,7 @@ abstract class WasmDeployExtension @Inject constructor(
 }
 
 open class CompressionConfig @Inject constructor(objects: ObjectFactory) {
-    var enabled: Boolean = false
+    var enabled: Boolean = true
     var brotli: Boolean = true
     var gzip: Boolean = false
     var level: Int = 9

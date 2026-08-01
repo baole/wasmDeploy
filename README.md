@@ -70,25 +70,38 @@ Building the project or running `./gradlew wasmJsBrowserDistribution` automatica
 
 ## Precompression & Size Budgets
 
-`wasmDeploy` supports both size-budget validation and automated precompression generation (`.br` and `.gz`).
+`wasmDeploy` supports automated static precompression (`.br` and `.gz`) alongside size-budget validation.
 
 ```kotlin
 wasmDeploy {
-    // 1. Budget validation (does not emit compressed files, validates size limits)
+    // 1. Budget validation (validates Brotli size limits during CI)
     defaultMaxWasmBrotliBytes = 3_300_000L
     maxTotalWasmBrotliBytes = 5_500_000L
     wasmBrotliBudget("**/skiko*.wasm", 2_000_000L)
 
-    // 2. Artifact precompression (emits .br and .gz files alongside fingerprinted assets)
+    // 2. Static precompression block
     compression {
-        enabled = true
-        brotli = true
-        gzip = true
-        level = 9
+        enabled = true  // Master toggle to enable .br/.gz sidecar generation
+        brotli = true   // Emits Brotli precompressed files (*.br)
+        gzip = true     // Emits Gzip precompressed files (*.gz)
+        level = 9       // Brotli compression quality level (1 to 11, default: 9)
         includes = listOf("**/*.wasm", "**/*.js", "**/*.mjs", "**/*.css", "**/*.html", "**/*.json", "**/*.svg")
+        excludes = emptyList()
     }
 }
 ```
+
+### Compression Block Configuration Reference
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | `Boolean` | `true` | Master switch to enable or disable static `.br` and `.gz` sidecar file generation during build. |
+| `brotli` | `Boolean` | `true` | When `true`, generates Brotli compressed files (`*.br`) alongside fingerprinted assets for modern browsers and CDNs (`brotli_static on;`). |
+| `gzip` | `Boolean` | `false` | When `true`, generates Gzip compressed files (`*.gz`) for legacy web servers (`gzip_static on;`). |
+| `level` | `Int` | `9` | Brotli compression quality level (range: `1` to `11`). Level `9` provides optimal compression ratio for production deployments. |
+| `includes` | `List<String>` | `listOf("**/*.wasm", ...)` | Glob patterns matching files eligible for precompression (`.wasm`, `.js`, `.css`, `.html`, `.svg`, `.json`). |
+| `excludes` | `List<String>` | `emptyList()` | Glob patterns to explicitly exclude specific files or paths from precompression. |
+
 
 ---
 
