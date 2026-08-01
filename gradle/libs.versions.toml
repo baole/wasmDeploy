@@ -1,5 +1,5 @@
 [versions]
-wasmdeploy = "0.3.8"
+wasmdeploy = "0.3.9"
 kotlin = "2.4.10"
 java = "21"
 gradle-publish = "2.1.1"

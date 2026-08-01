@@ -33,14 +33,8 @@ class WasmDeploySettingsPlugin : Plugin<Settings> {
             group = "com.github.webassembly",
             module = "binaryen",
         )
-        val forcePreferSettings = settings.providers.gradleProperty("wasmdeploy.strictRepositoriesMode")
-            .map { it.toBoolean() }
-            .orElse(false)
-            .get()
-        if (forcePreferSettings) {
-            settings.gradle.settingsEvaluated { evaluatedSettings ->
-                evaluatedSettings.dependencyResolutionManagement.repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
-            }
+        settings.gradle.settingsEvaluated { evaluatedSettings ->
+            evaluatedSettings.dependencyResolutionManagement.repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
         }
     }
 
