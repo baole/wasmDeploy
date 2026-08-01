@@ -1,0 +1,14 @@
+{
+  "name": "wasmdeploy-tools",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "minify": "node scripts/minify.mjs",
+    "verify-budget": "node scripts/verify-budget.mjs",
+    "verify-wasm-imports": "node scripts/verify-wasm-imports.mjs"
+  },
+  "devDependencies": {
+    "clean-css": "5.3.3",
+    "terser": "5.49.0"
+  }
+}
