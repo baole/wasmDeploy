@@ -664,6 +664,16 @@ internal object WasmDeploymentPipeline {
             }
         }
 
+        manifest.values.filter { file ->
+            file.endsWith(".ttf") || file.endsWith(".woff2")
+        }.sorted().forEach { fontFile ->
+            val ext = if (fontFile.endsWith(".woff2")) "font/woff2" else "font/ttf"
+            val tag = "<link rel=\"preload\" href=\"/$fontFile\" as=\"font\" type=\"$ext\" crossorigin=\"anonymous\">"
+            if (!htmlText.contains(fontFile)) {
+                links.add("    $tag")
+            }
+        }
+
         if (links.isEmpty()) return htmlText to 0
 
         val injection = links.joinToString("\n") + "\n  </head>"
