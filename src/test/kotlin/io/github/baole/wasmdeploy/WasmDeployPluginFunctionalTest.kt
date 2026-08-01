@@ -12,6 +12,7 @@ class WasmDeployPluginFunctionalTest {
     @Test
     fun `settings plugin provides Kotlin Wasm distribution repositories through settings`() {
         val project = Files.createTempDirectory("wasm-deploy-settings-functional")
+        project.resolve("gradle.properties").writeText("wasmdeploy.strictRepositoriesMode=true")
         project.resolve("settings.gradle.kts").writeText(
             """
             import org.gradle.api.initialization.resolve.RepositoriesMode

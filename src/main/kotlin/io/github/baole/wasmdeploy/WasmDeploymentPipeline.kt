@@ -243,18 +243,28 @@ internal object WasmDeploymentPipeline {
         var expression = "^"
         var index = 0
         while (index < pattern.length) {
-            val character = pattern[index]
-            if (character == '*' && index + 1 < pattern.length && pattern[index + 1] == '*') {
+            if (pattern.substring(index).startsWith("**/*")) {
                 expression += ".*"
-                index += 1
-            } else if (character == '*') {
-                expression += "[^/]*"
-            } else if (character == '?') {
-                expression += "[^/]"
+                index += 4
+            } else if (pattern.substring(index).startsWith("**/")) {
+                expression += "(?:|.*/)"
+                index += 3
             } else {
-                expression += Regex.escape(character.toString())
+                val character = pattern[index]
+                if (character == '*' && index + 1 < pattern.length && pattern[index + 1] == '*') {
+                    expression += ".*"
+                    index += 2
+                } else if (character == '*') {
+                    expression += "[^/]*"
+                    index += 1
+                } else if (character == '?') {
+                    expression += "[^/]"
+                    index += 1
+                } else {
+                    expression += Regex.escape(character.toString())
+                    index += 1
+                }
             }
-            index += 1
         }
         return Regex("$expression$").matches(value)
     }

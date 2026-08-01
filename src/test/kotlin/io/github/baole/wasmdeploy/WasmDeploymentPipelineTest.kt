@@ -135,6 +135,55 @@ class WasmDeploymentPipelineTest {
         }
     }
 
+    @Test
+    fun `optimize generates compression artifacts when enabled`() {
+        val source = createTempDirectory("wasm-deploy-source")
+        val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<script src=\"./main.js\"></script>")
+        source.resolve("main.js").writeText("const imports = { \"fixture.import\": () => Unit }")
+        source.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
+
+        val options = PipelineCompressionOptions(enabled = true, gzip = true, brotli = true)
+        WasmDeploymentPipeline.optimize(
+            source = source,
+            destination = release,
+            compressionOptions = options,
+        )
+
+        val bundle = filesIn(release).single { it.name.matches(Regex("main\\.[0-9a-f]{16}\\.js")) }
+        assertTrue(release.resolve("${bundle.name}.gz").exists())
+    }
+
+    @Test
+    fun `verify rejects tampered fingerprinted artifact`() {
+        val source = createTempDirectory("wasm-deploy-source")
+        val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<script src=\"./main.js\"></script>")
+        source.resolve("main.js").writeText("const imports = { \"fixture.import\": () => Unit }")
+        source.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
+
+        WasmDeploymentPipeline.optimize(source, release)
+
+        val bundle = filesIn(release).single { it.name.matches(Regex("main\\.[0-9a-f]{16}\\.js")) }
+        bundle.writeText("console.log('tampered')")
+
+        assertFailsWith<IllegalArgumentException> {
+            WasmDeploymentPipeline.verify(release)
+        }
+    }
+
+    @Test
+    fun `verify ignores client side SPA route navigation links`() {
+        val source = createTempDirectory("wasm-deploy-source")
+        val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<a href=\"/dashboard\">Dashboard</a><a href=\"settings\">Settings</a><script src=\"./main.js\"></script>")
+        source.resolve("main.js").writeText("const imports = { \"fixture.import\": () => Unit }")
+        source.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
+
+        WasmDeploymentPipeline.optimize(source, release)
+        WasmDeploymentPipeline.verify(release)
+    }
+
     private fun wasmWithJsCodeImport(importName: String): ByteArray {
         val module = "js_code".encodeToByteArray()
         val name = importName.encodeToByteArray()
