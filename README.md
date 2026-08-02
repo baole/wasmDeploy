@@ -2,6 +2,8 @@
 
 `wasmDeploy` packages Kotlin/Wasm production output into a cache-safe, fingerprinted, and deployable release for static web hosting providers.
 
+![WasmDeploy Optimization Report](docs/assets/report.png)
+
 ## What `wasmDeploy` Adds to the Existing Toolchain
 
 `wasmDeploy` reuses Kotlin/Wasm's production compiler and Webpack pipeline without replacing the Kotlin compiler, Binaryen, or Webpack.
@@ -65,6 +67,18 @@ wasmDeploy {
 ```
 
 Building the project or running `./gradlew wasmJsBrowserDistribution` automatically runs `wasmDeployRelease` to fingerprint assets, rewrite references, and verify the deployment release directory.
+
+---
+
+## Asset Fingerprinting & Cache Security
+
+`wasmDeploy` automatically generates content-hashed filenames using SHA-256 digests for all Wasm, JavaScript, and CSS assets (e.g. `composeApp.a1b2c3d4e5f6.wasm`).
+
+### How Fingerprinting Works
+- **SHA-256 Content Hashes:** Computes deterministic SHA-256 hash digests of all `.wasm`, `.js`, `.mjs`, and `.css` binaries.
+- **Automatic Reference Rewriting:** Iteratively scans and updates internal asset references across `index.html`, JavaScript entry points, CSS files, and web manifests to match fingerprinted filenames.
+- **HTML Preload Directives:** Injects `<link rel="preload">` tags into `index.html` for critical Wasm binaries and JS bundles so browsers fetch them in parallel immediately.
+- **Immutable Edge Caching:** Guarantees cache safety across CDNs and browsers using `Cache-Control: public, max-age=31536000, immutable`, preventing stale cache issues and eliminating re-validation roundtrips (`304 Not Modified`).
 
 ---
 
@@ -196,6 +210,12 @@ wasmDeploy {
 
 ## Tasks
 
+### Main Task
+
+- `wasmDeployRelease` — Runs the complete end-to-end deployment pipeline.
+
+### Additional Tasks
+
 - `wasmDeployPrepareTools` — Extracts bundled tool definitions.
 - `wasmDeployInstallTools` — Provisions plugin-managed Node.js and dependencies.
 - `wasmDeployPrepareOptimizedKotlinArtifacts` — Selects compiler-optimized Wasm artifacts before Webpack.
@@ -204,4 +224,3 @@ wasmDeploy {
 - `wasmDeployVerifySizeBudget` — Enforces configured Brotli size budgets.
 - `wasmDeployVerifyWasmImports` — Validates Wasm JavaScript imports.
 - `wasmDeployVerify` — Validates manifest integrity, SHA-256 hashes, entry points, and local references.
-- `wasmDeployRelease` — Runs the complete end-to-end deployment pipeline.
