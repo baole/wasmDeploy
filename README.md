@@ -50,10 +50,10 @@ plugins {
 
 kotlin {
     wasmJs {
-        moduleName = "composeApp"
+        moduleName = "webApp"
         browser {
             commonWebpackConfig {
-                outputFileName = "composeApp.js"
+                outputFileName = "webApp.js"
             }
         }
         binaries.executable()
@@ -66,13 +66,15 @@ wasmDeploy {
 }
 ```
 
+`wasmDeploy` discovers the Kotlin/Wasm entry bundle from the script referenced by `index.html`, so the module and output filename can use any valid project-specific name.
+
 Building the project or running `./gradlew wasmJsBrowserDistribution` automatically runs `wasmDeployRelease` to fingerprint assets, rewrite references, and verify the deployment release directory.
 
 ---
 
 ## Asset Fingerprinting & Cache Security
 
-`wasmDeploy` automatically generates content-hashed filenames using SHA-256 digests for all Wasm, JavaScript, and CSS assets (e.g. `composeApp.a1b2c3d4e5f6.wasm`).
+`wasmDeploy` automatically generates content-hashed filenames using SHA-256 digests for all Wasm, JavaScript, and CSS assets (e.g. `app.a1b2c3d4e5f6.wasm`).
 
 ### How Fingerprinting Works
 - **SHA-256 Content Hashes:** Computes deterministic SHA-256 hash digests of all `.wasm`, `.js`, `.mjs`, and `.css` binaries.

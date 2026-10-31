@@ -67,9 +67,34 @@ const minifyResourceDirectory = async (resourceDirectory, relativeDirectory = ""
 for (const resourceDirectory of resourceDirectories) await minifyResourceDirectory(resourceDirectory);
 
 const index = path.join(distributionDirectory, "index.html");
-const bundles = fs.readdirSync(distributionDirectory).filter((file) => /^(?:composeApp|main)\.[0-9a-f]{16,}\.js$/.test(file));
-if (fs.existsSync(index) && bundles.length === 1) {
+if (fs.existsSync(index)) {
   const html = fs.readFileSync(index, "utf8");
-  const updated = html.replace(/\/(?:composeApp|main)\.js/g, `/${bundles[0]}`);
+  const updated = html.replace(/(<script\b[^>]*\ssrc\s*=\s*)(["'])([^"']+)\2([^>]*>)/gi, (tag, prefix, quote, reference, suffix) => {
+    const pathAndSuffix = reference.match(/^([^?#]*)([?#].*)?$/);
+    const originalPath = pathAndSuffix?.[1] ?? reference;
+    const queryAndHash = pathAndSuffix?.[2] ?? "";
+    if (!originalPath || /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(originalPath) || path.posix.extname(originalPath).toLowerCase() !== ".js") {
+      return tag;
+    }
+
+    const relativePath = originalPath.replace(/^(?:\.\/|\/)+/, "");
+    const directory = path.posix.dirname(relativePath);
+    const name = path.posix.basename(relativePath);
+    const stem = name.slice(0, -path.posix.extname(name).length);
+    const distributionRoot = path.resolve(distributionDirectory);
+    const directoryPath = path.resolve(distributionRoot, directory);
+    if (directoryPath !== distributionRoot && !directoryPath.startsWith(`${distributionRoot}${path.sep}`)) return tag;
+    const exactPath = path.join(directoryPath, name);
+    if (fs.existsSync(exactPath)) return tag;
+
+    const candidates = fs.existsSync(directoryPath)
+      ? fs.readdirSync(directoryPath).filter((file) => file.startsWith(`${stem}.`) && /^\.[0-9a-f]{16,}\.js$/.test(file.slice(stem.length)))
+      : [];
+    if (candidates.length !== 1) return tag;
+
+    const rewrittenPath = path.posix.join(directory, candidates[0]);
+    const prefixPath = reference.startsWith("/") ? "/" : reference.startsWith("./") ? "./" : "";
+    return `${prefix}${quote}${prefixPath}${rewrittenPath}${queryAndHash}${quote}${suffix}`;
+  });
   if (updated !== html) fs.writeFileSync(index, updated, "utf8");
 }

@@ -18,23 +18,25 @@ class WasmDeploymentPipelineTest {
         val source = createTempDirectory("wasm-deploy-source")
         val release = createTempDirectory("wasm-deploy-release")
         val assets = Files.createDirectories(source.resolve("assets"))
-        source.resolve("index.html").writeText("<a href=\"/\">Trang chủ</a><script src=\"./assets/main.js\"></script>")
-        assets.resolve("main.js").writeText(
+        source.resolve("index.html").writeText("<html><head></head><body><a href=\"/\">Trang chủ</a><script src=\"./assets/webApp.js\"></script></body></html>")
+        assets.resolve("webApp.js").writeText(
             """
             const moduleUrl = new URL("./app.wasm", import.meta.url)
             const imports = { "fixture.import": () => Unit }
             """.trimIndent(),
         )
+        assets.resolve("helper.js").writeText("console.log('static helper')")
         assets.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
 
         WasmDeploymentPipeline.optimize(source, release)
 
         assertTrue(release.resolve("wasm-deploy-manifest.json").exists())
-        assertFalse(release.resolve("assets/main.js").exists())
+        assertFalse(release.resolve("assets/webApp.js").exists())
         assertFalse(release.resolve("assets/app.wasm").exists())
-        val hashedBundle = filesIn(release).single { it.name.matches(Regex("main\\.[0-9a-f]{16}\\.js")) }
+        val hashedBundle = filesIn(release).single { it.name.matches(Regex("webApp\\.[0-9a-f]{16}\\.js")) }
         val hashedWasm = filesIn(release).single { it.name.matches(Regex("app\\.[0-9a-f]{16}\\.wasm")) }
         assertTrue(hashedBundle.readText().contains(hashedWasm.name))
+        assertTrue(release.resolve("index.html").readText().contains("<link rel=\"modulepreload\" href=\"/assets/${hashedBundle.name}\">"))
 
         WasmDeploymentPipeline.verify(release)
     }
@@ -43,6 +45,7 @@ class WasmDeploymentPipelineTest {
     fun `verify rejects a Wasm JavaScript import that is absent from the loader`() {
         val source = createTempDirectory("wasm-deploy-source")
         val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<script src=\"./main.js\"></script>")
         source.resolve("main.js").writeText("const imports = { \"different.import\": () => Unit }")
         source.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
 
@@ -51,6 +54,20 @@ class WasmDeploymentPipelineTest {
         assertFailsWith<IllegalArgumentException> {
             WasmDeploymentPipeline.verify(release)
         }
+    }
+
+    @Test
+    fun `verify finds the bundle by its Wasm reference when imports are empty`() {
+        val source = createTempDirectory("wasm-deploy-source")
+        val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<script src=\"./webApp.js\"></script><script src=\"./helper.js\"></script>")
+        source.resolve("webApp.js").writeText("const moduleUrl = new URL('./app.wasm', import.meta.url)")
+        source.resolve("helper.js").writeText("console.log('static helper')")
+        source.resolve("app.wasm").writeBytes(byteArrayOf(0, 97, 115, 109, 1, 0, 0, 0))
+
+        WasmDeploymentPipeline.optimize(source, release)
+
+        WasmDeploymentPipeline.verify(release)
     }
 
     @Test
@@ -125,6 +142,7 @@ class WasmDeploymentPipelineTest {
     fun `verify enforces configured JavaScript deployment policy`() {
         val source = createTempDirectory("wasm-deploy-source")
         val release = createTempDirectory("wasm-deploy-release")
+        source.resolve("index.html").writeText("<script src=\"./main.js\"></script>")
         source.resolve("main.js").writeText("eval(''); const imports = { \"fixture.import\": () => Unit }")
         source.resolve("app.wasm").writeBytes(wasmWithJsCodeImport("fixture.import"))
 
