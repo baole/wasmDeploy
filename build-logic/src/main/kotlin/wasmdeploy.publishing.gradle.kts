@@ -1,7 +1,18 @@
+import nmcp.NmcpExtension
+
 plugins {
     `maven-publish`
     signing
     id("com.gradleup.nmcp")
+}
+
+afterEvaluate {
+    extensions.getByType(NmcpExtension::class.java).apply {
+        publishAllPublicationsToCentralPortal {
+            username = System.getenv("MAVEN_CENTRAL_USERNAME")
+            password = System.getenv("MAVEN_CENTRAL_PASSWORD")
+        }
+    }
 }
 
 plugins.withType<JavaPlugin> {

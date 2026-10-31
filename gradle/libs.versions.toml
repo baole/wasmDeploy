@@ -1,9 +1,9 @@
 [versions]
-wasmdeploy = "0.3.10"
-kotlin = "2.4.10"
+wasmdeploy = "0.3.11"
+kotlin = "2.4.21"
 java = "21"
-gradle-publish = "2.1.1"
-nmcp = "0.0.9"
+gradle-publish = "2.2.1"
+nmcp = "1.6.2"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }

@@ -43,4 +43,7 @@ jobs:
         run: ./gradlew assemble
 
       - name: Publish to Maven Local and Dry Run Publishing
+        env:
+          MAVEN_CENTRAL_USERNAME: placeholder
+          MAVEN_CENTRAL_PASSWORD: placeholder
         run: ./gradlew publishToMavenLocal publishAllPublicationsToCentralPortal --dry-run
