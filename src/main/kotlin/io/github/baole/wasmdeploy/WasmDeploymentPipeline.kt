@@ -401,21 +401,52 @@ internal object WasmDeploymentPipeline {
         }
 
         require(files(release).none { it.extension == "map" }) { "Production source maps must not be published" }
-        val bundle = files(release).singleOrNull { it.name.matches(Regex("(?:main|composeApp)\\.[0-9a-f]{16,}\\.js")) }
-            ?: error("Expected one fingerprinted Kotlin/Wasm JavaScript bundle")
+        val wasmFiles = files(release).filter { it.extension == "wasm" }
+        val wasmImports = wasmFiles.flatMap { wasm ->
+            WasmImports.functionImports(wasm.readBytes(), "js_code").map { wasm.name to it }
+        }
+        val bundle = findKotlinWasmBundle(release, wasmFiles, wasmImports)
         verifyReferences(release, manifest, bundle)
         val bundleText = bundle.readText()
         forbiddenJavaScriptPatterns.forEach { pattern ->
             require(pattern !in bundleText) { "Forbidden JavaScript pattern in ${bundle.name}: $pattern" }
         }
-        files(release).filter { it.extension == "wasm" }.flatMap { wasm ->
-            WasmImports.functionImports(wasm.readBytes(), "js_code").map { wasm.name to it }
-        }.forEach { (wasm, importName) ->
+        wasmImports.forEach { (wasm, importName) ->
             val issue = JavaScriptImportValidator.findIssue(bundleText, importName)
             require(issue == null) {
                 "Invalid JavaScript import for $wasm: js_code.$importName ($issue)"
             }
         }
+    }
+
+    private fun findKotlinWasmBundle(
+        release: Path,
+        wasmFiles: List<Path>,
+        wasmImports: List<Pair<String, String>>,
+    ): Path {
+        val index = release.resolve("index.html")
+        require(Files.isRegularFile(index)) { "Missing index.html" }
+
+        val candidatePaths = scriptSourceReference.findAll(index.readText())
+            .mapNotNull { localReference(it.groupValues[1]) }
+            .filter { Path.of(it).extension == "js" && isSafeRelativePath(it) }
+            .distinct()
+            .map { release.resolve(it).normalize() }
+            .filter { it.startsWith(release.normalize()) && Files.isRegularFile(it) }
+            .toList()
+
+        val bundles = candidatePaths.filter { candidate ->
+            val bundleText = candidate.readText()
+            if (wasmImports.isEmpty()) {
+                wasmFiles.any { wasm -> wasm.name in bundleText }
+            } else {
+                wasmImports.all { (_, importName) -> JavaScriptImportValidator.findIssue(bundleText, importName) == null }
+            }
+        }
+        require(bundles.size == 1) {
+            "Expected exactly one Kotlin/Wasm JavaScript bundle referenced from index.html with the Wasm imports; found ${bundles.size}"
+        }
+        return bundles.single()
     }
 
     private fun generateCompressionArtifacts(stagingDir: Path, options: PipelineCompressionOptions) {
@@ -646,14 +677,16 @@ internal object WasmDeploymentPipeline {
 
         val links = mutableListOf<String>()
 
-        manifest.values.filter { file ->
-            file.endsWith(".js") && file.matches(Regex("(?:^|/)(?:main|composeApp)\\.[0-9a-f]{16,}\\.js$"))
-        }.forEach { jsFile ->
-            val tag = "<link rel=\"modulepreload\" href=\"/$jsFile\">"
-            if (!htmlText.contains(tag)) {
-                links.add("    $tag")
+        scriptSourceReference.findAll(htmlText)
+            .mapNotNull { localReference(it.groupValues[1]) }
+            .filter { it.endsWith(".js") && it in manifest.values }
+            .distinct()
+            .forEach { jsFile ->
+                val tag = "<link rel=\"modulepreload\" href=\"/$jsFile\">"
+                if (!htmlText.contains(tag)) {
+                    links.add("    $tag")
+                }
             }
-        }
 
         manifest.values.filter { file ->
             file.endsWith(".wasm")
@@ -708,6 +741,7 @@ internal object WasmDeploymentPipeline {
     }
 
     private val quotedHtmlReference = Regex("(?:src|href|data-src)=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+    private val scriptSourceReference = Regex("<script\\b[^>]*\\ssrc\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>", RegexOption.IGNORE_CASE)
     private val htmlSrcsetReference = Regex("srcset=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
     private val cssUrlReference = Regex("url\\(\\s*[\"']?([^\"')]+)[\"']?\\s*\\)", RegexOption.IGNORE_CASE)
     private val cssImportReference = Regex("@import\\s+(?:url\\(['\"]?([^'\")]+)['\"]?\\)|['\"]([^'\"]+)['\"]);?", RegexOption.IGNORE_CASE)
