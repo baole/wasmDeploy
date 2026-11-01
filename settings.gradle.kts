@@ -20,4 +20,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "wasmDeploy"
+rootProject.name = "wasmdeploy"

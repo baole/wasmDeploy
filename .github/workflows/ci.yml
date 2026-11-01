@@ -42,8 +42,11 @@ jobs:
       - name: Build Plugin
         run: ./gradlew assemble
 
-      - name: Publish to Maven Local and Dry Run Publishing
+      - name: Publish to Maven Local
+        run: ./gradlew publishToMavenLocal
+
+      - name: Validate Central Portal task configuration
         env:
           MAVEN_CENTRAL_USERNAME: placeholder
           MAVEN_CENTRAL_PASSWORD: placeholder
-        run: ./gradlew publishToMavenLocal publishAllPublicationsToCentralPortal --dry-run
+        run: ./gradlew publishAllPublicationsToCentralPortal --dry-run
